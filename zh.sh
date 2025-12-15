@@ -2,18 +2,27 @@
 set -e
 
 echo "=============================="
-echo " STEP 1: 安装 V2Ray/Xray Core "
+echo " STEP 1: 确保基础依赖"
+echo "=============================="
+apt update -y
+apt install -y curl unzip jq
+
+echo
+echo "=============================="
+echo " STEP 2: 安装 Xray Core（独立）"
 echo "=============================="
 
-if ! command -v v2ray >/dev/null 2>&1 && ! command -v xray >/dev/null 2>&1; then
-    bash <(curl -fsSL https://git.io/v2ray.sh)
+if ! command -v xray >/dev/null 2>&1; then
+    curl -L -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+    unzip -o /tmp/xray.zip -d /usr/local/bin
+    chmod +x /usr/local/bin/xray
 else
-    echo "[INFO] 已检测到 v2ray/xray，跳过安装"
+    echo "[INFO] Xray 已存在"
 fi
 
 echo
 echo "=============================="
-echo " STEP 2: 安装自定义 SOCKS + VLESS"
+echo " STEP 3: 执行你的自定义安装脚本"
 echo "=============================="
 
 TMP_DIR=/tmp/xray-custom-install
@@ -21,14 +30,11 @@ rm -rf $TMP_DIR
 mkdir -p $TMP_DIR
 cd $TMP_DIR
 
-curl -fsSL \
-  https://raw.githubusercontent.com/xiaohei999s-langwwwa/xray-sv/main/install.sh \
-  -o install.sh
-
+curl -fsSL https://raw.githubusercontent.com/xiaohei999s-langwwwa/xray-sv/main/install.sh -o install.sh
 chmod +x install.sh
 bash install.sh
 
 echo
 echo "=============================="
-echo " ✅ 安装完成"
+echo " ✅ 完成：Xray + SOCKS + VLESS"
 echo "=============================="
