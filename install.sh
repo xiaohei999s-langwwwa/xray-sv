@@ -1,49 +1,52 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -e
 
-# ===== 可改参数（一般不用动）=====
-SOCKS_PORT=12324
-VLESS_PORT=23456
+# ===== 随机参数 =====
+SOCKS_PORT=$(shuf -i 20000-30000 -n 1)
+VLESS_PORT=$(shuf -i 30001-40000 -n 1)
 
-# ===== 自动生成 =====
-SOCKS_USER=$(openssl rand -hex 6)
-SOCKS_PASS=$(openssl rand -hex 5)
+USER=$(openssl rand -hex 6)
+PASS=$(openssl rand -hex 5)
 UUID=$(cat /proc/sys/kernel/random/uuid)
 
-echo "[1/6] Installing dependencies..."
-apt update -y >/dev/null 2>&1
-apt install -y curl unzip openssl iproute2 >/dev/null 2>&1
+IP=$(curl -s ifconfig.me)
 
-echo "[2/6] Installing Xray..."
-mkdir -p /usr/local/bin
-cd /usr/local/bin
-curl -sL -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-unzip -oq xray.zip
-chmod +x xray
+XRAY_BIN=$(command -v xray || command -v v2ray)
+CONF_DIR=/etc/xray
+CONF_FILE=$CONF_DIR/custom.json
 
-echo "[3/6] Writing config..."
-cat >/etc/xray.json <<EOF
+if [ -z "$XRAY_BIN" ]; then
+  echo "❌ 未检测到 xray / v2ray core，请先运行 233boy 脚本"
+  exit 1
+fi
+
+mkdir -p $CONF_DIR
+
+# ===== 写配置 =====
+cat > $CONF_FILE <<EOF
 {
   "log": { "loglevel": "warning" },
   "inbounds": [
     {
       "listen": "0.0.0.0",
-      "port": ${SOCKS_PORT},
+      "port": $SOCKS_PORT,
       "protocol": "socks",
       "settings": {
         "auth": "password",
         "accounts": [
-          { "user": "${SOCKS_USER}", "pass": "${SOCKS_PASS}" }
+          { "user": "$USER", "pass": "$PASS" }
         ],
         "udp": true
       }
     },
     {
       "listen": "0.0.0.0",
-      "port": ${VLESS_PORT},
+      "port": $VLESS_PORT,
       "protocol": "vless",
       "settings": {
-        "clients": [{ "id": "${UUID}" }],
+        "clients": [
+          { "id": "$UUID" }
+        ],
         "decryption": "none"
       },
       "streamSettings": {
@@ -52,21 +55,20 @@ cat >/etc/xray.json <<EOF
       }
     }
   ],
-  "outbounds": [{ "protocol": "freedom" }]
+  "outbounds": [
+    { "protocol": "freedom" }
+  ]
 }
 EOF
 
-echo "[4/6] Testing config..."
-/usr/local/bin/xray run -test -config /etc/xray.json
-
-echo "[5/6] Creating service..."
-cat >/etc/systemd/system/xray-sv.service <<EOF
+# ===== 单独 systemd（不影响 233boy）=====
+cat >/etc/systemd/system/xray-custom.service <<EOF
 [Unit]
-Description=Xray SOCKS5 + VLESS
+Description=Xray Custom Inbounds
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/xray run -config /etc/xray.json
+ExecStart=$XRAY_BIN run -config $CONF_FILE
 Restart=always
 LimitNOFILE=1048576
 
@@ -74,25 +76,23 @@ LimitNOFILE=1048576
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reexec
 systemctl daemon-reload
-systemctl enable xray-sv
-systemctl restart xray-sv
+systemctl enable xray-custom >/dev/null
+systemctl restart xray-custom
 
-sleep 2
+sleep 1
 
-IP=$(curl -s https://ifconfig.me || curl -s https://ipinfo.io/ip)
-
+# ===== 输出结果 =====
 echo
-echo "================= RESULT ================="
+echo "================ 生成结果 ================"
 echo
-echo "SOCKS5 URL:"
-echo "socks5://${SOCKS_USER}:${SOCKS_PASS}@${IP}:${SOCKS_PORT}"
+echo "SOCKS 四段式："
+echo "$IP:$SOCKS_PORT:$USER:$PASS"
 echo
-echo "SOCKS5 :"
-echo "${IP}:${SOCKS_PORT}:${SOCKS_USER}:${SOCKS_PASS}"
+echo "SOCKS URL："
+echo "socks5://$USER:$PASS@$IP:$SOCKS_PORT"
 echo
-echo "VLESS:"
-echo "vless://${UUID}@${IP}:${VLESS_PORT}?type=tcp&security=none"
+echo "VLESS："
+echo "vless://$UUID@$IP:$VLESS_PORT?type=tcp&security=none"
 echo
 echo "=========================================="
